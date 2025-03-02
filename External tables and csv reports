@@ -1,0 +1,283 @@
+
+--SCENARIO 1 Preparation: Table Creation
+CREATE TABLE customers 
+(
+  CustomerID number NOT NULL,
+  Customer_Name varchar2(100) NOT NULL,
+  City varchar2(100) DEFAULT NULL
+);
+
+ALTER TABLE customers
+ADD CONSTRAINT PK_CustomerID PRIMARY KEY (CustomerID);
+
+INSERT INTO customers (CustomerID, Customer_Name, City) VALUES
+(1, ' John Smith', 'New York');
+
+INSERT INTO customers (CustomerID, Customer_Name, City) VALUES
+(2, ' Jane Doe', ' Los Angeles');
+
+/*####################################################################################################################*/
+
+CREATE TABLE orders (
+  OrderID number NOT NULL,
+  CustomerID number NOT NULL,
+  Order_Amount number DEFAULT NULL
+);
+
+
+ALTER TABLE orders
+ADD CONSTRAINT PK_OrderID PRIMARY KEY (OrderID);
+
+ALTER TABLE orders
+ADD CONSTRAINT FK_CustomerID FOREIGN KEY (CustomerID) REFERENCES customers(CustomerID);
+
+INSERT INTO orders (OrderID, CustomerID, Order_Amount) VALUES
+(1001, 1, 250);
+
+INSERT INTO orders (OrderID, CustomerID, Order_Amount) VALUES
+(1002, 1, 300);
+
+INSERT INTO orders (OrderID, CustomerID, Order_Amount) VALUES
+(1003, 2, 400);
+/*#####################################################################################################################*/
+
+
+
+--SCENARIO 1
+
+-- 1. Write a query to retrieve the total order amount for each customer.
+
+SELECT  cust.customer_name, 
+		SUM(odrs.order_amount)
+	FROM customers cust
+JOIN orders odrs ON odrs.CustomerID = cust.CustomerID
+GROUP BY cust.customer_name;
+ 
+ 
+-- 2. Write a query to list all customers who have placed orders with an amountgreater than 200.
+
+SELECT DISTINCT cust.CustomerID,
+		cust.customer_name, 
+		cust.City
+	FROM customers cust
+JOIN orders odrs ON odrs.CustomerID = cust.CustomerID
+WHERE odrs.order_amount > 200;
+
+--SCENARIO 2
+-- Question 1:
+
+CREATE TABLE Employees
+(EmployeeID NUMBER PRIMARY KEY,
+ FirstName 	VARCHAR2(50),
+ LastName  	VARCHAR2(50),
+ HireDate 	DATE);
+ 
+
+ -- Question 2:
+ DECLARE
+	v_salary1  	NUMBER := 500;
+	v_salary2	NUMBER := 900;
+ BEGIN
+	DBMS_OUTPUT.PUT_LINE('The sum of the two salaries is :'|| TO_CHAR(v_salary1 + v_salary2));
+ END;
+ 
+ -- Question 3:
+
+CREATE INDEX OrdAmt_idx
+ON orders (OrderAmount);
+
+
+
+/* SCENARIO 3*/
+
+-- 1. A populated Oracle database (or alternative database) with the extracted data.
+
+CREATE TABLE financial_advisor 
+(
+  id NUMBER PRIMARY KEY NOT NULL,
+  advisor_name VARCHAR2(100),
+  advisor_telephone NUMBER
+);
+
+
+CREATE TABLE clients 
+(
+  id number PRIMARY KEY NOT NULL,
+  advisor_id NUMBER,
+  client_name VARCHAR2(50),
+  telephone NUMBER
+);
+
+
+CREATE TABLE client_transaction 
+(
+  id NUMBER PRIMARY KEY NOT NULL,
+  type VARCHAR2(50),
+  amount NUMBER(15,2),
+  client_id NUMBER,
+  transaction_date DATE,
+  currency VARCHAR2(3)
+);
+
+
+ALTER TABLE clients
+ADD CONSTRAINT fk_advisor_id FOREIGN KEY (advisor_id) REFERENCES financial_advisor(id);
+
+ALTER TABLE client_transaction
+ADD CONSTRAINT fk_client_id FOREIGN KEY (client_id) REFERENCES clients(id);
+
+
+
+
+/* Start Create external tables*/
+
+
+-- Create a DIRECTORY to hold csv files
+CREATE OR REPLACE DIRECTORY my_csv_directory AS 'C:\Oracle Directory Files';
+
+
+CREATE TABLE ext_financial_advisor (
+    ID NUMBER,
+    ADVISOR_NAME VARCHAR2(50),
+    ADVISOR_TELEPHONE NUMBER)
+ORGANIZATION EXTERNAL (
+    TYPE ORACLE_LOADER
+    DEFAULT DIRECTORY my_csv_directory
+    ACCESS PARAMETERS (
+        RECORDS DELIMITED BY NEWLINE
+        FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '"'
+        MISSING FIELD VALUES ARE NULL
+    )
+    LOCATION ('Financial_advisor.csv')
+)
+REJECT LIMIT UNLIMITED;
+
+/*###############################################################################*/
+
+CREATE TABLE ext_clients (
+    ID NUMBER,
+    ADVISOR_ID NUMBER,
+    CLIENT_NAME VARCHAR2(50),
+    CLIENT_TELEPHONE NUMBER)
+ORGANIZATION EXTERNAL (
+    TYPE ORACLE_LOADER
+    DEFAULT DIRECTORY my_csv_directory
+    ACCESS PARAMETERS (
+        RECORDS DELIMITED BY NEWLINE
+        FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '"'
+        MISSING FIELD VALUES ARE NULL
+    )
+    LOCATION ('Clients.csv')
+)
+REJECT LIMIT UNLIMITED;
+
+/*###############################################################################*/
+
+CREATE TABLE ext_clients_trans (
+    ID NUMBER,
+    Type VARCHAR2(50),
+    Amount NUMBER,
+    Client_ID NUMBER,
+    Transaction_Date VARCHAR2(12),  
+    Currency VARCHAR2(5)
+)
+ORGANIZATION EXTERNAL (
+    TYPE ORACLE_LOADER
+    DEFAULT DIRECTORY my_csv_directory
+    ACCESS PARAMETERS (
+        RECORDS DELIMITED BY NEWLINE
+		--SKIP 1 -- Skip the first 2 rows
+        FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '"'
+        MISSING FIELD VALUES ARE NULL
+    )
+    LOCATION ('Financial_transaction.csv')
+)
+REJECT LIMIT UNLIMITED;
+/* End Create external tables*/
+
+
+/* Start Insert into tables from the external tables*/
+
+--Insert into "financial_advisor, clients" tables from external tables*/
+
+--Insert financial advisor data
+INSERT INTO financial_advisor (id, advisor_name, advisor_telephone)
+SELECT id, advisor_name, advisor_telephone FROM ext_financial_advisor;
+
+--Insert client data
+INSERT INTO clients (id, advisor_id, client_name, telephone)
+SELECT id, advisor_id, client_name, client_telephone FROM ext_clients;
+
+--Insert client transaction data
+INSERT INTO client_transaction (id, client_id, type, amount, transaction_date, currency)
+SELECT id, client_id, type, amount, TO_DATE(Transaction_Date, 'DD/MM/YYYY') AS Transaction_Date, currency FROM ext_clients_trans;
+
+/* End Insert into tables from the external tables*/
+
+-- 2. A script to generate the specified report in CSV format.
+
+DECLARE
+
+    CURSOR c_client_trans_rep 
+            IS 
+        SELECT  clnt.client_name ,
+                cltr.*
+        FROM clients clnt
+            JOIN client_transaction cltr ON cltr.client_id = clnt.id
+        ORDER BY clnt.client_name;
+        
+    CURSOR c_financial_adviser_rep 
+            IS 
+        SELECT fina.advisor_name, clnt.client_name, clnt.telephone AS client_telephone
+        FROM financial_advisor fina
+        JOIN clients clnt ON clnt.advisor_id = fina.id
+        ORDER BY fina.advisor_name;
+        
+    v_rows1 VARCHAR2(2000);
+    v_rows2 VARCHAR2(2000);
+    v_fin_adviser_file UTL_FILE.FILE_TYPE;
+    v_client_tran_file UTL_FILE.FILE_TYPE;  
+BEGIN
+
+    
+    BEGIN
+        -- Open file: Client Transaction Report
+        v_client_tran_file := UTL_FILE.FOPEN('MY_CSV_DIRECTORY', 'Client Transaction Report.csv', 'W');
+
+        -- header row: Client Transaction Report
+        UTL_FILE.PUT_LINE(v_client_tran_file, 'Client Name, Transaction ID, Transaction Type, Transaction, Amount, Client ID, Transaction Date, Currency');    
+    
+        FOR j IN c_client_trans_rep LOOP
+         v_rows2 := j.client_name || ',' || j.id || ',' || j.type || ',' ||j.amount || ',' || j.client_id || ',' || j.transaction_date || ',' || j.currency;
+            UTL_FILE.PUT_LINE(v_client_tran_file, v_rows2);
+        END LOOP;
+        -- Close files
+        UTL_FILE.FCLOSE(v_client_tran_file);
+    END;
+
+    BEGIN
+        -- Open file: Financial Adviser Report
+        v_fin_adviser_file := UTL_FILE.FOPEN('MY_CSV_DIRECTORY', 'Financial Adviser Report.csv', 'W');
+
+        -- header row: Financial Adviser Report
+        UTL_FILE.PUT_LINE(v_fin_adviser_file, 'Advisor Name,Client Name,Client Telephone');
+
+        -- data rows: Financial Adviser Report
+        FOR i IN c_financial_adviser_rep LOOP
+            v_rows1 := i.advisor_name || ',' || i.client_name || ',' || i.client_telephone;
+            UTL_FILE.PUT_LINE(v_fin_adviser_file, v_rows1);
+        END LOOP;
+        -- Close files
+        UTL_FILE.FCLOSE(v_fin_adviser_file);
+    END;
+EXCEPTION 
+    WHEN UTL_FILE.INVALID_FILEHANDLE THEN
+        DBMS_OUTPUT.PUT_LINE('-20001'|| ','|| 'Invalid File.');
+    WHEN UTL_FILE.WRITE_ERROR THEN
+        DBMS_OUTPUT.PUT_LINE('-20002' || ','|| 'Unable to write to file');
+    WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('Error Message: ' || SQLERRM);
+        DBMS_OUTPUT.PUT_LINE('Error Code: ' || SQLCODE);
+END;
+
+
