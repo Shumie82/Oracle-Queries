@@ -1,0 +1,11 @@
+Client Name, Transaction ID, Transaction Type, Transaction, Amount, Client ID, Transaction Date, Currency
+Bruce Lee,6,New Business,22500,5,23/JAN/25,ZAR
+Dali Mpofu,2,New Business,500000,2,01/MAY/25,ZAR
+Dali Mpofu,8,Withdrawal,10000,2,31/JAN/25,ZAR
+Elon Musk,7,Withdrawal,5000,1,31/JAN/25,ZAR
+Elon Musk,3,Additional investment,10000,1,01/SEP/25,ZAR
+Elon Musk,1,New Business,1000000,1,01/MAY/25,ZAR
+John Wick,10,Switch,500,4,02/AUG/25,USD
+John Wick,5,New Business,3000,4,15/JAN/25,USD
+Lionel Messi,9,Additional investment,300000,3,02/MAR/25,ZAR
+Lionel Messi,4,New Business,3000000,3,01/OCT/25,ZAR
